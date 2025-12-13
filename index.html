@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lolacake</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link 
+      href="https://fonts.googleapis.com/css2?family=Lato:wght@100;300;400;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Federoka+One&display=swap" rel="stylesheet">
+
+    <!-- Midtrans Snap Loader -->
+    <script type="module">
+      const isProd = import.meta.env.VITE_MIDTRANS_ENV === "production";
+      const clientKey = import.meta.env.VITE_MIDTRANS_CLIENT_KEY;
+
+      const snapScript = document.createElement("script");
+      snapScript.src = isProd
+        ? "https://app.midtrans.com/snap/snap.js"
+        : "https://app.sandbox.midtrans.com/snap/snap.js";
+
+      snapScript.setAttribute("data-client-key", clientKey);
+      document.head.appendChild(snapScript);
+    </script>
+  </head>
+
+  <body class="font-sans antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

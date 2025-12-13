@@ -1,0 +1,18 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+:root {
+  --brand: #f08b2d;
+  --choco: #3d231d;
+  --coffee: #4a261f;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: #213547;
+  background-color: #ffffff;
+}
