@@ -6,6 +6,8 @@ import Dashboard from "./Dashboard";
 import ProductForm from "./Product";
 import BusinessInfo from "./BusinessInfo";
 import TestimonialManager from "./Testimonials";
+import OrderManagement from "./OrderManagement";
+
 
 export default function AdminRoutes() {
   return (
@@ -21,6 +23,7 @@ export default function AdminRoutes() {
         <Route path="/edit-product/:id" element={<ProductForm />} /> 
         <Route path="/businessinfo" element={<BusinessInfo />} />
         <Route path="/testimonials" element={<TestimonialManager />} />
+        <Route path="/ordermanagement" element={<OrderManagement />} />
       </Route>
     </Routes>
   );

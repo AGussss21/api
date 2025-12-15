@@ -55,7 +55,7 @@ export default function OrderStatus() {
     );
   }
 
-  const status = order.status || (order.paid ? "Menunggu Konfirmasi" : "Menunggu Pembayaran");
+  const status = order.status || "Menunggu Pembayaran";
   const buyer = order.receiver || { name: "-", phone: "-", email: "-" };
   const store = order.store || null;
   const checkout = order.checkout || {};
@@ -68,6 +68,32 @@ export default function OrderStatus() {
       return {};
     }
   })();
+
+  useEffect(() => {
+  if (!transCode) return;
+
+  async function fetchOrder() {
+    try {
+      const res = await fetch(`/api/payments/orders/${transCode}`);
+      if (!res.ok) return;
+
+      const data = await res.json();
+
+      // 🔑 update state dari DB
+      setOrder(prev => ({ ...(prev || {}), ...data }));
+
+      // 🔑 sinkronkan ke sessionStorage
+      persistOrderStatus(transCode, {
+        status: data.status,
+      });
+    } catch (e) {
+      console.warn("fetch order failed:", e);
+    }
+  }
+
+  fetchOrder();
+}, [transCode]);
+
 
   function handleCancelOrder() {
     const ok = window.confirm("Yakin ingin membatalkan pesanan ini? Aksi ini akan membatalkan order dan tidak bisa dikembalikan.");

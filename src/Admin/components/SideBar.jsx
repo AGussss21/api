@@ -15,6 +15,7 @@ export default function Sidebar({ isOpen, toggleSidebar, closeSidebar }) {
     { path: "/admin/product", name: "Produk", icon: <ShoppingBag size={20} /> },
     { path: "/admin/testimonials", name: "Testimoni", icon: <MessageSquare size={20} /> },
     { path: "/admin/businessinfo", name: "Info Usaha", icon: <Store size={20} /> },
+    { path: "/admin/ordermanagement", name: "Kelola Pesanan", icon: <ShoppingBag size={20} /> },
   ];
 
   return (

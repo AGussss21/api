@@ -83,7 +83,7 @@ export default function PaymentNow() {
   const { total, checkout } = order;
   const items = checkout?.items || [];
   const invoiceNo = order?.invoiceNo || `INV${new Date().getFullYear()}${String(Date.now()).slice(-6)}`;
-  const kodeTrans = order?.transCode || `MID${String(Date.now()).slice(-8)}`;
+  
 
   const methods = [
     {
@@ -141,17 +141,8 @@ export default function PaymentNow() {
   // -----------------------
   async function handleProceed() {
     if (!selectedMethod) return;
-    // set local checkout payload
-    const payload = {
-      ...order,
-      invoiceNo,
-      transCode: kodeTrans,
-      selectedMethod,
-      total,
-      createdAt: order.createdAt || new Date().toISOString(),
-    };
-    sessionStorage.setItem("user_checkout", JSON.stringify(payload));
-    ensurePaymentMetaFor(kodeTrans, selectedMethod);
+
+
 
     // if method is considered online -> call backend & Midtrans snap
     if (isOnlineMethod(selectedMethod)) {
@@ -176,25 +167,66 @@ if (order.packingFee && Number(order.packingFee) > 0) {
       setLoadingPay(true);
       try {
         // create order in backend, get snap token
-        const res = await axios.post(`${API_ROOT}/payments/orders`, {
-          user_email: order?.email || null,
-          items: itemsForBackend,
-          payment_method: "ONLINE",
-            total: total,               
-  packingFee: order.packingFee
-        });
+        const receiverPayload = {
+  ...order.receiver,
+  address: order.delivery?.address || "-", // ✅ address ikut ke Midtrans
+};
 
-        const { data } = res;
-        const snapToken = data?.snap_token || data?.token || data?.redirect_token;
-        const redirectUrl = data?.redirect_url || data?.redirectUrl;
+const token = localStorage.getItem("token");
 
-        // store minimal order info returned by backend
-        const saved = {
-          ...payload,
-          order_id: data?.order_id || null,
-          gateway: data?.gateway_data || null,
-        };
-        sessionStorage.setItem("user_checkout", JSON.stringify(saved));
+const res = await axios.post(
+  `${API_ROOT}/payments/orders`,
+  {
+    user_email: receiverPayload.email,
+    receiver: receiverPayload,
+    items: itemsForBackend,
+    payment_method: "ONLINE",
+  },
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  }
+);
+
+const data = res.data;
+
+const backendTransCode = data.trans_code;
+const snapToken = data.snap_token;
+const redirectUrl = data.redirect_url;
+
+
+// ✅ BARU BOLEH SIMPAN
+const saved = {
+  ...order,
+  invoiceNo,
+  transCode: backendTransCode,
+  selectedMethod,
+  total,
+  createdAt: order.createdAt || new Date().toISOString(),
+};
+
+sessionStorage.setItem(
+  "user_checkout",
+  JSON.stringify({
+    ...order,
+    invoiceNo,
+    transCode: backendTransCode,
+    selectedMethod,
+    total,
+    createdAt: order.createdAt || new Date().toISOString(),
+  })
+);
+
+sessionStorage.setItem(
+  "user_order",
+  JSON.stringify({
+    ...order,
+    transCode: backendTransCode,
+    // ❌ JANGAN ADA STATUS
+  })
+);
+ensurePaymentMetaFor(backendTransCode, selectedMethod);
 
         // if got snapToken -> call window.snap.pay
         if (snapToken && typeof window !== "undefined" && window.snap) {
@@ -268,14 +300,15 @@ if (order.packingFee && Number(order.packingFee) > 0) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-4">
           <InvoiceCard
-            invoiceNo={invoiceNo}
-            transCode={kodeTrans}
-            date={new Date().toLocaleDateString("id-ID")}
-            status={order.status || "Menunggu Pembayaran"}
-            items={items}
-            packingFee={order.packingFee}
-            total={total}
-          />
+  invoiceNo={invoiceNo}
+  transCode={order?.transCode}  // ✅
+  date={new Date().toLocaleDateString("id-ID")}
+  status={order.status || "Menunggu Pembayaran"}
+  items={items}
+  packingFee={order.packingFee}
+  total={total}
+/>
+
         </div>
 
         <div className="lg:col-span-8">
@@ -287,7 +320,9 @@ if (order.packingFee && Number(order.packingFee) > 0) {
                 <div>
                   <div className="text-xs text-gray-500">Total</div>
                   <div className="text-2xl font-bold">{fmtRp(total)}</div>
-                  <div className="text-xs text-gray-400 mt-1">Order ID {kodeTrans}</div>
+                  <div className="text-xs text-gray-400 mt-1">
+  Order ID {order?.transCode || "-"}   // ✅
+</div>
                 </div>
 
                 <div className="text-sm text-gray-600">

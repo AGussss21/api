@@ -13,6 +13,8 @@ export const verifyToken = (req, res, next) => {
     req.user = decoded; // simpan payload di req.user
     next();
   } catch (error) {
+    console.log("AUTH HEADER:", req.headers.authorization);
+console.log("JWT_SECRET:", process.env.JWT_SECRET);
     console.log("Token auth error:", error);
     res.status(401).json({ error: "Token tidak valid!" });
   }

@@ -117,7 +117,50 @@ export default function PaymentWaiting() {
     }, 300);
   }
 
+  async function checkOrderStatus() {
+  try {
+    const res = await fetch(`/api/payments/orders/${transCode}`);
+
+    // ⬇️ ini penting
+    if (res.status === 404) return;
+
+    if (!res.ok) return;
+
+    const data = await res.json();
+
+    if (data.status === "PAID") {
+  // simpan order TERBARU dari backend
+  sessionStorage.setItem("user_order", JSON.stringify(data));
+
+  // checkout boleh tetap (hanya metadata)
+  const checkout = JSON.parse(sessionStorage.getItem("user_checkout")) || {};
+  checkout.status = "PAID";
+  sessionStorage.setItem("user_checkout", JSON.stringify(checkout));
+
+  nav(`/orders/${transCode}`, { replace: true });
+}
+
+
+  } catch (err) {
+    console.warn("checkOrderStatus skipped:", err);
+  }
+}
+
+
+
+
   const qrDataUrl = paymentMeta.qrText ? svgDataUrlFromText(paymentMeta.qrText) : null;
+
+  useEffect(() => {
+  if (!transCode) return;
+
+  const id = setInterval(() => {
+    checkOrderStatus();
+  }, 5000); // cek status tiap 5 detik
+
+  return () => clearInterval(id);
+}, [transCode]);
+
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">

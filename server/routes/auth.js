@@ -207,7 +207,7 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      { expiresIn: "7d" }
     );
 
    res.json({
@@ -226,6 +226,7 @@ router.post("/login", async (req, res) => {
 
   } catch (err) {
     console.error("LOGIN ERROR:", err);
+    console.log("JWT_SECRET =", process.env.JWT_SECRET);
     res.status(500).json({ error: "Terjadi kesalahan server" });
   }
 });

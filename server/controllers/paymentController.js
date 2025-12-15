@@ -41,7 +41,7 @@ export async function createOrder(req, res) {
 
     // Simpan di tabel yang ada: invoice_no, trans_code, user_id (null jika email), total, status, created, meta
     // user_id tidak tersedia langsung dari email; menyimpan null jika tak ada mapping
-    const user_id = null;
+    const user_id = req.user?.id || null;
 
     // NOTE: total col is decimal(12,2) — simpan sebagai string/number with 2 decimals
     const totalDecimal = Number(total).toFixed(2);
@@ -57,16 +57,54 @@ export async function createOrder(req, res) {
 }
     // Jika online -> panggil Midtrans Snap
     if ((payment_method || "ONLINE").toUpperCase() === "ONLINE") {
+  
+      const receiver = req.body.receiver || {};
+
+// fallback email: FE → DB user → null
+let email = receiver.email || user_email || null;
+
+if (!email && user_id) {
+  const [u] = await pool.execute(
+    "SELECT email FROM users WHERE id = ? LIMIT 1",
+    [user_id]
+  );
+  email = u?.[0]?.email || null;
+} 
+
       const parameter = {
-        transaction_details: { order_id: trans_code, gross_amount: Number(totalDecimal) },
-        item_details: items.map(it => ({
-          id: it.id,
-          price: Number(it.price),
-          quantity: Number(it.qty || 1),
-          name: it.nama || it.title || it.id,
-        })),
-        customer_details: { email: user_email || undefined },
-      };
+  transaction_details: {
+    order_id: trans_code,
+    gross_amount: Number(totalDecimal),
+  },
+  item_details: items.map(it => ({
+    id: it.id,
+    price: Number(it.price),
+    quantity: Number(it.qty || 1),
+    name: it.nama || it.title || it.id,
+  })),
+   customer_details: {
+    first_name: receiver.name,
+    email: email || undefined,
+    phone: receiver.phone || undefined,
+
+    billing_address: {
+      first_name: receiver.name,
+      phone: receiver.phone || undefined,
+      address: receiver.address,
+    },
+
+    shipping_address: {
+      first_name: receiver.name,
+      phone: receiver.phone || undefined,
+      address: receiver.address,
+    },
+  },
+  callbacks: {
+    finish: "http://localhost:5173/payment/finish",
+    pending: "http://localhost:5173/payment/pending",
+    error: "http://localhost:5173/payment/error",
+  },
+};
 
       try {
         const snapResponse = await snap.createTransaction(parameter);
@@ -210,20 +248,24 @@ export async function createSnapTransaction(req, res) {
       console.warn("[createSnapTransaction] gross_amount differs from items sum", { computedGross, gross_amount });
       // kita lanjutkan menggunakan gross_amount yang dikirim
     }
-
-    const parameter = {
-      transaction_details: {
-        order_id: String(order_id),
-        gross_amount: Math.round(Number(gross_amount) || computedGross || 0),
-      },
-      item_details: itemDetails,
-      customer_details: {
-        email: customer.email || undefined,
-        first_name: customer.first_name || undefined,
-        last_name: customer.last_name || undefined,
-        phone: customer.phone || undefined,
-      },
-    };
+const parameter = {
+  transaction_details: {
+    order_id: String(order_id),
+    gross_amount: Math.round(Number(gross_amount) || computedGross || 0),
+  },
+  item_details: itemDetails,
+  customer_details: {
+    email: customer.email || undefined,
+    first_name: customer.first_name || undefined,
+    last_name: customer.last_name || undefined,
+    phone: customer.phone || undefined,
+  },
+  callbacks: {
+    finish: "http://localhost:5173/payment/finish",
+    pending: "http://localhost:5173/payment/pending",
+    error: "http://localhost:5173/payment/error",
+  },
+};
 
     // request ke Midtrans
     const snapResponse = await snap.createTransaction(parameter);
@@ -293,4 +335,52 @@ export async function createSnapTransaction(req, res) {
       details: err?.response?.data || null,
     });
   }
+}  
+export async function getAllOrders(req, res) {
+  try {
+    const [rows] = await pool.execute(
+      "SELECT id, invoice_no, trans_code, total, status, created, meta FROM orders ORDER BY created DESC"
+    );
+
+    const data = rows.map((row) => ({
+      ...row,
+      meta: row.meta ? JSON.parse(row.meta) : null,
+    }));
+
+    return res.json(data);
+  } catch (err) {
+    console.error("[getAllOrders] error:", err);
+    return res.status(500).json({ error: "internal", details: err.message });
+  }
 }
+
+export async function getMyOrders(req, res) {
+  try {
+    const userId = req.user.id;
+
+    const [rows] = await pool.execute(
+      `
+      SELECT id, invoice_no, trans_code, total, status, meta
+      FROM orders
+      WHERE user_id = ?
+      ORDER BY id DESC
+      `,
+      [userId]
+    );
+
+    const data = rows.map(row => ({
+      ...row,
+      meta: row.meta ? JSON.parse(row.meta) : null
+    }));
+
+    return res.json(data); // ✅ PASTI ARRAY
+  } catch (err) {
+    console.error("[getMyOrders] error:", err);
+    return res.status(500).json({
+      error: "Failed to load orders",
+      detail: err.message
+    });
+  }
+}
+
+

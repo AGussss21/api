@@ -17,6 +17,60 @@ function readUser() {
 }
 const saveUser = (u) => localStorage.setItem("user", JSON.stringify(u));
 
+function mapOrderFromDB(order) {
+  const items = order.meta?.items || [];
+
+  let status = "unpaid";
+  let badgeText = "Menunggu pembayaran";
+  let badgeTone = "warning";
+  let actions = ["Batalkan pesanan", "Bayar sekarang"];
+
+  switch (order.status) {
+    case "PAID":
+      status = "processing";
+      badgeText = "Sedang Diproses";
+      badgeTone = "info";
+      actions = ["Hubungi Toko"];
+      break;
+
+    case "READY":
+      status = "ready";
+      badgeText = "Siap Diambil";
+      badgeTone = "success";
+      actions = ["Hubungi Toko"];
+      break;
+
+    case "SHIPPED":
+      status = "delivering";
+      badgeText = "Dikirim";
+      badgeTone = "success";
+      actions = ["Hubungi Toko"];
+      break;
+
+    case "COMPLETED":
+    case "CANCELLED":
+      return null; // masuk history
+  }
+
+  return {
+    id: order.id,
+    code: `#${order.trans_code}`,
+    type: order.meta?.mode === "delivery" ? "Delivery" : "Self Pick Up",
+    items: items.map(i => ({ name: `${i.nama} x${i.qty}` })),
+    total: Number(order.total),
+    status,
+    badgeText,
+    badgeTone,
+    date: new Date(order.created_at).toLocaleDateString("id-ID"),
+    bottomText:
+      status === "unpaid"
+        ? "Segera lakukan pembayaran"
+        : "Pesanan sedang diproses",
+    bottomType: status === "unpaid" ? "danger" : "muted",
+    actions,
+  };
+}
+
 export default function AccountPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,131 +104,87 @@ export default function AccountPage() {
   const [popup, setPopup] = useState({ open: false });
   const [statusBanner, setStatusBanner] = useState(null); // success / error banner
   const fileRef = useRef();
+  const [activeOrders, setActiveOrders] = useState([]);
+const [historyOrders, setHistoryOrders] = useState([]);
+const [loadingOrders, setLoadingOrders] = useState(false);
+const [orderFilter, setOrderFilter] = useState("all"); 
+const [historyFilter, setHistoryFilter] = useState("done");
 
-  // ===== Dummy data untuk "Pesanan saya" & Riwayat =====
-  const SAMPLE_ACTIVE_ORDERS = [
-    {
-      id: "ORD-1",
-      code: "#3478FCHVKGO",
-      type: "Self Pick Up",
-      items: [
-        { name: "Bolu Keju x2" },
-        { name: "Bolu Zebra x2" },
-      ],
-      total: 280000,
-      status: "unpaid", // unpaid | processing | ready | delivering
-      badgeText: "Menunggu pembayaran",
-      badgeTone: "warning",
-      date: "22 Okt 2025",
-      bottomText: "Bayar sebelum 30 Oktober 2025, pukul 23.59",
-      bottomType: "danger", // warna teks merah kecil
-      actions: ["Batalkan pesanan", "Bayar sekarang"],
-    },
-    {
-      id: "ORD-2",
-      code: "#3478FCHVKGO",
-      type: "Self Pick Up",
-      items: [{ name: "Bolu Keju" }],
-      total: 75000,
-      status: "unpaid",
-      badgeText: "Menunggu pembayaran",
-      badgeTone: "warning",
-      date: "05 May 2025",
-      bottomText: "Bayar sebelum 30 Oktober 2025, pukul 23.59",
-      bottomType: "danger",
-      actions: ["Batalkan pesanan", "Bayar sekarang"],
-    },
-    {
-      id: "ORD-3",
-      code: "#ORD-3",
-      type: "Self Pick Up",
-      items: [{ name: "Bolu Keju" }],
-      total: 75000,
-      status: "processing",
-      badgeText: "Sedang Diproses",
-      badgeTone: "info",
-      date: "30 Okt 2025",
-      bottomText:
-        "Estimasi siap diambil 1-2 hari kerja setelah pembayaran dikonfirmasi.",
-      bottomType: "muted",
-      actions: ["Hubungi Toko"],
-    },
-    {
-      id: "ORD-4",
-      code: "#ORD-4",
-      type: "Self Pick Up",
-      items: [{ name: "Bolu Keju" }],
-      total: 75000,
-      status: "ready",
-      badgeText: "Siap Diambil",
-      badgeTone: "success",
-      date: "05 May 2025",
-      bottomText: "Ambil di jam operasional (08.00 – 17.00 WIB)",
-      bottomType: "success",
-      actions: ["Hubungi Toko"],
-    },
-    {
-      id: "ORD-5",
-      code: "#ORD-5",
-      type: "Delivery",
-      items: [{ name: "Bolu Keju" }],
-      total: 75000,
-      status: "delivering",
-      badgeText: "Siap Dikirim",
-      badgeTone: "success",
-      date: "05 May 2025",
-      bottomText: "Ambil di jam operasional (08.00 – 17.00 WIB)",
-      bottomType: "success",
-      actions: ["Hubungi Toko"],
-    },
-  ];
 
-  const SAMPLE_HISTORY = [
-    {
-      id: "HIST-1",
-      code: "#3478FCHVKGO",
-      type: "Self Pick Up",
-      itemName: "Bolu Keju",
-      total: 75000,
-      date: "30 Okt 2025",
-      status: "completed", // completed | canceled
-      statusText: "Selesai",
-      statusTone: "success",
-      bottomText: "Tanggal Selesai: 31 Oktober 2025",
-      bottomTone: "danger",
-      actions: ["Pesan lagi", "Tulis Ulasan"],
+
+  const filteredActiveOrders = useMemo(() => {
+  if (orderFilter === "all") return activeOrders;
+  if (orderFilter === "unpaid")
+    return activeOrders.filter(o => o.status === "unpaid");
+  if (orderFilter === "processing")
+    return activeOrders.filter(o => o.status === "processing");
+  if (orderFilter === "taken")
+    return activeOrders.filter(o =>
+      o.status === "ready" || o.status === "delivering"
+    );
+  return activeOrders;
+}, [orderFilter, activeOrders]);
+
+const filteredHistory = useMemo(() => {
+  if (historyFilter === "done")
+    return historyOrders.filter(o => o.status === "completed");
+  return historyOrders.filter(o => o.status === "canceled");
+}, [historyFilter, historyOrders]);
+
+
+
+  useEffect(() => {
+  if (tab !== "orders" && tab !== "history") return;
+
+  setLoadingOrders(true);
+
+  fetch("http://localhost:5000/api/payments/orders/my", {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
     },
-    {
-      id: "HIST-2",
-      code: "#3478FCHVKGO",
-      type: "Self Pick Up",
-      itemName: "Bolu Keju",
-      total: 75000,
-      date: "30 Okt 2025",
-      status: "canceled",
-      statusText: "Dibatalkan",
-      statusTone: "danger",
-      bottomText: "Pembayaran tidak dilakukan dalam 24 jam.",
-      bottomTone: "danger",
-      actions: ["Pesan Ulang"],
-    },
-  ];
+  })
+    .then(res => res.json())
+    .then(data => {
+      const active = [];
+      const history = [];
 
-  const [orderFilter, setOrderFilter] = useState("all"); // all | unpaid | processing | taken
-  const [historyFilter, setHistoryFilter] = useState("done"); // done | canceled
+      data.forEach(order => {
+        if (["COMPLETED", "CANCELLED"].includes(order.status)) {
+          history.push({
+            id: order.id,
+            code: `#${order.trans_code}`,
+            type: order.meta?.mode === "delivery" ? "Delivery" : "Self Pick Up",
+            itemName: order.meta?.items?.[0]?.nama || "-",
+            total: Number(order.total),
+            date: new Date(order.created_at).toLocaleDateString("id-ID"),
+            status: order.status === "COMPLETED" ? "completed" : "canceled",
+            statusText: order.status === "COMPLETED" ? "Selesai" : "Dibatalkan",
+            statusTone: order.status === "COMPLETED" ? "success" : "danger",
+            bottomText:
+              order.status === "COMPLETED"
+                ? "Pesanan selesai"
+                : "Pesanan dibatalkan",
+            bottomTone: "danger",
+            actions:
+              order.status === "COMPLETED"
+                ? ["Pesan lagi", "Tulis Ulasan"]
+                : ["Pesan ulang"],
+          });
+        } else {
+          const mapped = mapOrderFromDB(order);
+          if (mapped) active.push(mapped);
+        }
+      });
 
-  const filteredActiveOrders = SAMPLE_ACTIVE_ORDERS.filter((o) => {
-    if (orderFilter === "all") return true;
-    if (orderFilter === "unpaid") return o.status === "unpaid";
-    if (orderFilter === "processing") return o.status === "processing";
-    if (orderFilter === "taken")
-      return o.status === "ready" || o.status === "delivering";
-    return true;
-  });
+      setActiveOrders(active);
+      setHistoryOrders(history);
+    })
+    .catch(err => {
+      console.error("Load orders failed:", err);
+    })
+    .finally(() => setLoadingOrders(false));
+}, [tab]);
 
-  const filteredHistory = SAMPLE_HISTORY.filter((o) =>
-    historyFilter === "done" ? o.status === "completed" : o.status === "canceled"
-  );
 
   // ====================================================
   useEffect(() => {

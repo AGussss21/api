@@ -26,6 +26,9 @@ import RequireAuth from "./components/RequireAuth";
 import OrderStatus from "./pages/orders/OrderStatus.jsx";
 import AdminRoutes from "./Admin/AdminRoutes.jsx";
 import { api } from "./lib/api";
+import PaymentPendingRedirect from "./pages/checkout/PaymentPendingRedirect.jsx";
+import PaymentFinish from "./pages/checkout/PaymentFinish.jsx";
+
 
 // ======================
 // CONTEXT BUSINESS INFO
@@ -93,6 +96,8 @@ export default function App() {
               <Route path="/orders/:transCode" element={<RequireAuth><OrderStatus /></RequireAuth>} />
               <Route path="/profile/*" element={<RequireAuth><AccountPage /></RequireAuth>} />
               <Route path="/admin/*" element={<AdminRoutes />} />
+              <Route path="/payment/pending" element={<PaymentPendingRedirect />} />
+              <Route path="/payment/finish" element={<PaymentFinish />} />
             </Routes>
           </MainLayout>
         </Router>
